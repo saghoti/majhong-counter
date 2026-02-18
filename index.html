@@ -491,7 +491,7 @@ function renderScoreboard() {
 let scoring = {};
 
 function openScoring() {
-  scoring = { type: null, winner: null, loser: null, taiCount: 0, multiplier: 1 };
+  scoring = { type: null, winner: null, loser: null, dealer: null, taiCount: 0, multiplier: 1 };
   stepChooseType();
 }
 
@@ -517,12 +517,23 @@ function stepChooseType() {
 
 function stepChooseWinner() {
   const btns = state.players.map((name, i) =>
-    `<button class="btn btn-secondary" onclick="scoring.winner=${i};${scoring.type === '放槍' ? 'stepChooseLoser()' : 'stepChooseTai()'}">${esc(name)}</button>`
+    `<button class="btn btn-secondary" onclick="scoring.winner=${i};${scoring.type === '放槍' ? 'stepChooseLoser()' : 'stepChooseDealer()'}">${esc(name)}</button>`
   ).join('');
   showModal(`
     <h2>誰胡牌？</h2>
     <div class="modal-btns">${btns}</div>
     <button class="btn btn-secondary" onclick="stepChooseType()" style="margin-top:4px">上一步</button>
+  `);
+}
+
+function stepChooseDealer() {
+  const btns = state.players.map((name, i) =>
+    `<button class="btn btn-secondary${scoring.dealer === i ? ' selected' : ''}" onclick="scoring.dealer=${i};stepChooseTai()">${esc(name)}</button>`
+  ).join('');
+  showModal(`
+    <h2>誰是莊家？</h2>
+    <div class="modal-btns">${btns}</div>
+    <button class="btn btn-secondary" onclick="stepChooseWinner()" style="margin-top:4px">上一步</button>
   `);
 }
 
@@ -547,8 +558,14 @@ function renderTaiStep() {
   const amount = state.base + state.tai * scoring.taiCount;
   let preview = '';
   if (scoring.type === '自摸') {
-    const total = amount * 3;
-    preview = `每家付 ${amount}，共收 ${total}`;
+    const d = scoring.dealer, w = scoring.winner;
+    if (d !== null && d !== w) {
+      const dealerAmount = state.base + state.tai * (scoring.taiCount + 1);
+      const total = amount * 2 + dealerAmount;
+      preview = `非莊每家付 ${amount}，${esc(state.players[d])}(莊)付 ${dealerAmount}，共收 ${total}`;
+    } else {
+      preview = `每家付 ${amount}，共收 ${amount * 3}`;
+    }
   } else {
     preview = `${esc(state.players[scoring.loser])} 付 ${amount}`;
   }
@@ -562,7 +579,7 @@ function renderTaiStep() {
     <div class="calc-preview">${preview}</div>
     <div class="modal-btns">
       <button class="btn btn-primary" onclick="stepChooseMultiplier()">下一步</button>
-      <button class="btn btn-secondary" onclick="${scoring.type === '放槍' ? 'stepChooseLoser()' : 'stepChooseWinner()'}">上一步</button>
+      <button class="btn btn-secondary" onclick="${scoring.type === '放槍' ? 'stepChooseLoser()' : 'stepChooseDealer()'}">上一步</button>
     </div>
   `);
 }
@@ -582,7 +599,14 @@ function renderMultiplierStep() {
   const finalAmount = amount * scoring.multiplier;
   let preview = '';
   if (scoring.type === '自摸') {
-    preview = `每家付 ${finalAmount}，共收 ${finalAmount * 3}`;
+    const d = scoring.dealer, w = scoring.winner;
+    if (d !== null && d !== w) {
+      const dealerFinal = (state.base + state.tai * (scoring.taiCount + 1)) * scoring.multiplier;
+      const total = finalAmount * 2 + dealerFinal;
+      preview = `非莊每家付 ${finalAmount}，${esc(state.players[d])}(莊)付 ${dealerFinal}，共收 ${total}`;
+    } else {
+      preview = `每家付 ${finalAmount}，共收 ${finalAmount * 3}`;
+    }
   } else {
     preview = `${esc(state.players[scoring.loser])} 付 ${finalAmount}`;
   }
@@ -618,14 +642,24 @@ function confirmScore() {
   const mulTag = mul > 1 ? ` ×${mul}` : '';
 
   if (scoring.type === '自摸') {
-    for (let i = 0; i < 4; i++) {
-      if (i === w) {
-        state.scores[i] += amount * 3;
-      } else {
-        state.scores[i] -= amount;
+    const d = scoring.dealer;
+    const hasDealer = d !== null && d !== w;
+    if (hasDealer) {
+      const dealerAmount = (state.base + state.tai * (scoring.taiCount + 1)) * mul;
+      const totalWin = amount * 2 + dealerAmount;
+      for (let i = 0; i < 4; i++) {
+        if (i === w) state.scores[i] += totalWin;
+        else if (i === d) state.scores[i] -= dealerAmount;
+        else state.scores[i] -= amount;
       }
+      desc = `${state.players[w]} 自摸 ${scoring.taiCount}台${mulTag} (+${totalWin})，${state.players[d]}(莊)+1台`;
+    } else {
+      for (let i = 0; i < 4; i++) {
+        if (i === w) state.scores[i] += amount * 3;
+        else state.scores[i] -= amount;
+      }
+      desc = `${state.players[w]} 自摸 ${scoring.taiCount}台${mulTag} (+${amount * 3})`;
     }
-    desc = `${state.players[w]} 自摸 ${scoring.taiCount}台${mulTag} (+${amount * 3})`;
   } else {
     const l = scoring.loser;
     state.scores[w] += amount;
