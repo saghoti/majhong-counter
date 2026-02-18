@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="screen-orientation" content="landscape">
+<title>麻將計分</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    overflow: hidden;
+    user-select: none;
+  }
+  @media screen and (orientation: portrait) {
+    .rotate-hint { display: flex !important; }
+    .app { display: none !important; }
+  }
+  .rotate-hint {
+    display: none;
+    position: fixed; inset: 0;
+    background: #1a1a2e;
+    align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px;
+    font-size: 20px; color: #aaa; z-index: 9999;
+  }
+  .rotate-hint .icon { font-size: 48px; animation: rotate-anim 2s ease-in-out infinite; }
+  @keyframes rotate-anim { 0%,100%{transform:rotate(0deg)} 50%{transform:rotate(90deg)} }
+
+  .app { width: 100%; height: 100%; display: flex; flex-direction: column; }
+
+  /* ===== Setup Screen ===== */
+  .screen { display: none; width: 100%; height: 100%; }
+  .screen.active { display: flex; }
+
+  #setup-screen {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 16px 24px;
+  }
+  #setup-screen h1 {
+    font-size: 22px;
+    color: #e94560;
+    margin-bottom: 2px;
+    letter-spacing: 4px;
+  }
+  .setup-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+  }
+  .setup-row label { width: 60px; text-align: right; color: #aaa; flex-shrink: 0; }
+  .setup-row input {
+    width: 100px;
+    padding: 6px 10px;
+    border: 1px solid #333;
+    border-radius: 8px;
+    background: #16213e;
+    color: #fff;
+    font-size: 14px;
+    text-align: center;
+    outline: none;
+  }
+  .setup-row input:focus { border-color: #e94560; }
+  .player-inputs {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  }
+  .player-inputs input {
+    width: 120px;
+    padding: 8px 12px;
+    border: 2px solid #333;
+    border-radius: 10px;
+    background: #16213e;
+    color: #fff;
+    font-size: 14px;
+    text-align: center;
+    outline: none;
+  }
+  .player-inputs input:focus { border-color: #e94560; }
+  .btn {
+    padding: 10px 32px;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+    letter-spacing: 2px;
+  }
+  .btn:active { transform: scale(0.95); }
+  .btn-primary { background: #e94560; color: #fff; }
+  .btn-primary:active { background: #c73650; }
+  .btn-secondary { background: #16213e; color: #ccc; border: 1px solid #444; }
+  .btn-secondary:active { background: #1a2a4a; }
+
+  /* ===== Game Screen ===== */
+  #game-screen {
+    flex-direction: column;
+    height: 100%;
+  }
+  .scoreboard {
+    display: flex;
+    flex: 1;
+    gap: 6px;
+    padding: 8px 8px 0;
+  }
+  .player-card {
+    flex: 1;
+    background: #16213e;
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    position: relative;
+    border: 2px solid transparent;
+    transition: border-color .2s;
+  }
+  .player-card.positive { border-color: #2ecc71; }
+  .player-card.negative { border-color: #e74c3c; }
+  .player-card .name {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 2px;
+  }
+  .player-card .score {
+    font-size: 32px;
+    font-weight: 800;
+  }
+  .player-card .score.pos { color: #2ecc71; }
+  .player-card .score.neg { color: #e74c3c; }
+  .player-card .score.zero { color: #888; }
+  .player-card .rank {
+    position: absolute;
+    top: 6px; left: 10px;
+    font-size: 11px;
+    color: #666;
+    font-weight: 600;
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 8px;
+  }
+  .toolbar .btn { padding: 10px 24px; font-size: 15px; }
+
+  /* ===== Modal ===== */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.7);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: #16213e;
+    border-radius: 18px;
+    padding: 20px 24px;
+    min-width: 360px;
+    max-width: 90vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .modal h2 {
+    font-size: 18px;
+    letter-spacing: 2px;
+    color: #e94560;
+  }
+  .modal-btns {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .modal-btns .btn { min-width: 100px; font-size: 15px; padding: 10px 20px; }
+  .modal-btns .btn.selected { background: #e94560; color: #fff; border-color: #e94560; }
+
+  .tai-control {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 24px;
+    font-weight: 700;
+  }
+  .tai-control .btn {
+    width: 44px; height: 44px;
+    padding: 0;
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+  }
+  .tai-val { min-width: 40px; text-align: center; }
+
+  .calc-preview {
+    font-size: 13px;
+    color: #aaa;
+    text-align: center;
+    min-height: 18px;
+  }
+
+  /* History */
+  #history-screen {
+    flex-direction: column;
+    height: 100%;
+    padding: 10px;
+  }
+  #history-screen h2 { text-align: center; color: #e94560; margin-bottom: 8px; letter-spacing: 2px; }
+  .history-list {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .history-item {
+    background: #16213e;
+    border-radius: 10px;
+    padding: 8px 14px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .history-item .desc { flex: 1; }
+  .history-item .undo-btn {
+    background: none; border: 1px solid #e94560; color: #e94560;
+    border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+  }
+  .history-back { margin-top: 8px; align-self: center; }
+</style>
+</head>
+<body>
+<div class="rotate-hint">
+  <div class="icon">📱</div>
+  <div>請橫向使用手機</div>
+</div>
+
+<div class="app">
+  <!-- Setup Screen -->
+  <div id="setup-screen" class="screen active">
+    <h1>🀄 麻將計分</h1>
+    <div class="player-inputs">
+      <input type="text" id="p1" placeholder="東/玩家1" maxlength="6">
+      <input type="text" id="p2" placeholder="南/玩家2" maxlength="6">
+      <input type="text" id="p3" placeholder="西/玩家3" maxlength="6">
+      <input type="text" id="p4" placeholder="北/玩家4" maxlength="6">
+    </div>
+    <div style="display:flex;gap:16px">
+      <div class="setup-row">
+        <label>底</label>
+        <input type="number" id="base-price" value="30" min="0">
+      </div>
+      <div class="setup-row">
+        <label>一台</label>
+        <input type="number" id="tai-price" value="10" min="0">
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="startGame()">開始</button>
+  </div>
+
+  <!-- Game Screen -->
+  <div id="game-screen" class="screen">
+    <div class="scoreboard" id="scoreboard"></div>
+    <div class="toolbar">
+      <button class="btn btn-primary" onclick="openScoring()">計分</button>
+      <button class="btn btn-secondary" onclick="showHistory()">紀錄</button>
+      <button class="btn btn-secondary" onclick="resetGame()">重置</button>
+    </div>
+  </div>
+
+  <!-- History Screen -->
+  <div id="history-screen" class="screen">
+    <h2>計分紀錄</h2>
+    <div class="history-list" id="history-list"></div>
+    <button class="btn btn-secondary history-back" onclick="showScreen('game-screen')">返回</button>
+  </div>
+</div>
+
+<!-- Scoring Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script>
+const state = {
+  players: [],
+  scores: [0, 0, 0, 0],
+  base: 30,
+  tai: 10,
+  history: []
+};
+
+// --- Screen management ---
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// --- Setup ---
+function startGame() {
+  const names = [
+    document.getElementById('p1').value.trim() || '玩家1',
+    document.getElementById('p2').value.trim() || '玩家2',
+    document.getElementById('p3').value.trim() || '玩家3',
+    document.getElementById('p4').value.trim() || '玩家4',
+  ];
+  state.players = names;
+  state.scores = [0, 0, 0, 0];
+  state.history = [];
+  state.base = parseInt(document.getElementById('base-price').value) || 30;
+  state.tai = parseInt(document.getElementById('tai-price').value) || 10;
+  renderScoreboard();
+  showScreen('game-screen');
+}
+
+function resetGame() {
+  if (!confirm('確定要重置所有分數？')) return;
+  state.scores = [0, 0, 0, 0];
+  state.history = [];
+  renderScoreboard();
+}
+
+// --- Scoreboard ---
+function renderScoreboard() {
+  const sb = document.getElementById('scoreboard');
+  // Calculate ranks
+  const sorted = state.scores.map((s, i) => ({ s, i })).sort((a, b) => b.s - a.s);
+  const ranks = [0, 0, 0, 0];
+  sorted.forEach((item, idx) => { ranks[item.i] = idx + 1; });
+
+  sb.innerHTML = state.players.map((name, i) => {
+    const s = state.scores[i];
+    const cls = s > 0 ? 'positive' : s < 0 ? 'negative' : '';
+    const scls = s > 0 ? 'pos' : s < 0 ? 'neg' : 'zero';
+    const prefix = s > 0 ? '+' : '';
+    return `<div class="player-card ${cls}">
+      <span class="rank">#${ranks[i]}</span>
+      <span class="name">${esc(name)}</span>
+      <span class="score ${scls}">${prefix}${s}</span>
+    </div>`;
+  }).join('');
+}
+
+// --- Scoring flow ---
+let scoring = {};
+
+function openScoring() {
+  scoring = { type: null, winner: null, loser: null, taiCount: 0, multiplier: 1 };
+  stepChooseType();
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('active');
+}
+
+function showModal(html) {
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal').classList.add('active');
+}
+
+function stepChooseType() {
+  showModal(`
+    <h2>胡牌方式</h2>
+    <div class="modal-btns">
+      <button class="btn btn-primary" onclick="scoring.type='自摸';stepChooseWinner()">自摸</button>
+      <button class="btn btn-primary" onclick="scoring.type='放槍';stepChooseWinner()">放槍</button>
+    </div>
+    <button class="btn btn-secondary" onclick="closeModal()" style="margin-top:4px">取消</button>
+  `);
+}
+
+function stepChooseWinner() {
+  const btns = state.players.map((name, i) =>
+    `<button class="btn btn-secondary" onclick="scoring.winner=${i};${scoring.type === '放槍' ? 'stepChooseLoser()' : 'stepChooseTai()'}">${esc(name)}</button>`
+  ).join('');
+  showModal(`
+    <h2>誰胡牌？</h2>
+    <div class="modal-btns">${btns}</div>
+    <button class="btn btn-secondary" onclick="stepChooseType()" style="margin-top:4px">上一步</button>
+  `);
+}
+
+function stepChooseLoser() {
+  const btns = state.players.map((name, i) => {
+    if (i === scoring.winner) return '';
+    return `<button class="btn btn-secondary" onclick="scoring.loser=${i};stepChooseTai()">${esc(name)}</button>`;
+  }).join('');
+  showModal(`
+    <h2>誰放槍？</h2>
+    <div class="modal-btns">${btns}</div>
+    <button class="btn btn-secondary" onclick="stepChooseWinner()" style="margin-top:4px">上一步</button>
+  `);
+}
+
+function stepChooseTai() {
+  scoring.taiCount = 0;
+  renderTaiStep();
+}
+
+function renderTaiStep() {
+  const amount = state.base + state.tai * scoring.taiCount;
+  let preview = '';
+  if (scoring.type === '自摸') {
+    const total = amount * 3;
+    preview = `每家付 ${amount}，共收 ${total}`;
+  } else {
+    preview = `${esc(state.players[scoring.loser])} 付 ${amount}`;
+  }
+  showModal(`
+    <h2>幾台？</h2>
+    <div class="tai-control">
+      <button class="btn btn-secondary" onclick="changeTai(-1)">−</button>
+      <span class="tai-val" id="tai-display">${scoring.taiCount}</span>
+      <button class="btn btn-secondary" onclick="changeTai(1)">+</button>
+    </div>
+    <div class="calc-preview">${preview}</div>
+    <div class="modal-btns">
+      <button class="btn btn-primary" onclick="stepChooseMultiplier()">下一步</button>
+      <button class="btn btn-secondary" onclick="${scoring.type === '放槍' ? 'stepChooseLoser()' : 'stepChooseWinner()'}">上一步</button>
+    </div>
+  `);
+}
+
+function changeTai(d) {
+  scoring.taiCount = Math.max(0, scoring.taiCount + d);
+  renderTaiStep();
+}
+
+function stepChooseMultiplier() {
+  scoring.multiplier = 1;
+  renderMultiplierStep();
+}
+
+function renderMultiplierStep() {
+  const amount = state.base + state.tai * scoring.taiCount;
+  const finalAmount = amount * scoring.multiplier;
+  let preview = '';
+  if (scoring.type === '自摸') {
+    preview = `每家付 ${finalAmount}，共收 ${finalAmount * 3}`;
+  } else {
+    preview = `${esc(state.players[scoring.loser])} 付 ${finalAmount}`;
+  }
+  const mulLabel = scoring.multiplier + 'x';
+  showModal(`
+    <h2>倍率</h2>
+    <div class="tai-control">
+      <button class="btn btn-secondary" onclick="changeMultiplier(-1)">−</button>
+      <span class="tai-val">${mulLabel}</span>
+      <button class="btn btn-secondary" onclick="changeMultiplier(1)">+</button>
+    </div>
+    <div class="calc-preview">(${state.base} + ${state.tai}×${scoring.taiCount}) × ${scoring.multiplier} = ${finalAmount}</div>
+    <div class="calc-preview">${preview}</div>
+    <div class="modal-btns">
+      <button class="btn btn-primary" onclick="confirmScore()">確認</button>
+      <button class="btn btn-secondary" onclick="renderTaiStep()">上一步</button>
+    </div>
+  `);
+}
+
+function changeMultiplier(d) {
+  scoring.multiplier = Math.max(1, scoring.multiplier + d);
+  renderMultiplierStep();
+}
+
+function confirmScore() {
+  const baseAmount = state.base + state.tai * scoring.taiCount;
+  const amount = baseAmount * scoring.multiplier;
+  const mul = scoring.multiplier;
+  const w = scoring.winner;
+  const prev = [...state.scores];
+  let desc = '';
+  const mulTag = mul > 1 ? ` ×${mul}` : '';
+
+  if (scoring.type === '自摸') {
+    for (let i = 0; i < 4; i++) {
+      if (i === w) {
+        state.scores[i] += amount * 3;
+      } else {
+        state.scores[i] -= amount;
+      }
+    }
+    desc = `${state.players[w]} 自摸 ${scoring.taiCount}台${mulTag} (+${amount * 3})`;
+  } else {
+    const l = scoring.loser;
+    state.scores[w] += amount;
+    state.scores[l] -= amount;
+    desc = `${state.players[w]} 胡 ${state.players[l]} ${scoring.taiCount}台${mulTag} (+${amount})`;
+  }
+
+  state.history.push({ desc, prev, after: [...state.scores] });
+  renderScoreboard();
+  closeModal();
+}
+
+// --- History ---
+function showHistory() {
+  const list = document.getElementById('history-list');
+  if (state.history.length === 0) {
+    list.innerHTML = '<div style="text-align:center;color:#666;padding:20px">尚無紀錄</div>';
+  } else {
+    list.innerHTML = state.history.map((h, i) => `
+      <div class="history-item">
+        <span class="desc">${i + 1}. ${esc(h.desc)}</span>
+        <button class="undo-btn" onclick="undoTo(${i})">撤銷</button>
+      </div>
+    `).reverse().join('');
+  }
+  showScreen('history-screen');
+}
+
+function undoTo(idx) {
+  if (!confirm(`確定撤銷「${state.history[idx].desc}」？（此筆之後的紀錄也會一併撤銷）`)) return;
+  state.scores = [...state.history[idx].prev];
+  state.history = state.history.slice(0, idx);
+  renderScoreboard();
+  showHistory();
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>
