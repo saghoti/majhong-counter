@@ -70,16 +70,38 @@
   }
   .setup-row input:focus { border-color: #e94560; }
   .player-inputs {
-    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+    display: flex; gap: 14px; flex-wrap: wrap; justify-content: center;
   }
+  .player-setup {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .avatar-upload {
+    width: 62px; height: 62px;
+    border-radius: 50%;
+    border: 2px dashed #555;
+    background: #0f3460;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    overflow: hidden;
+    flex-shrink: 0;
+    transition: border-color .2s;
+  }
+  .avatar-upload:active { border-color: #e94560; transform: scale(0.95); }
+  .avatar-upload img { width: 100%; height: 100%; object-fit: cover; }
   .player-inputs input {
-    width: 120px;
-    padding: 8px 12px;
+    width: 80px;
+    padding: 6px 8px;
     border: 2px solid #333;
     border-radius: 10px;
     background: #16213e;
     color: #fff;
-    font-size: 14px;
+    font-size: 13px;
     text-align: center;
     outline: none;
   }
@@ -144,6 +166,24 @@
     font-size: 11px;
     color: #666;
     font-weight: 600;
+  }
+  .player-card .avatar {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #333;
+    flex-shrink: 0;
+  }
+  .player-card .avatar-placeholder {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    background: #0f3460;
+    border: 2px solid #333;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
   }
 
   .toolbar {
@@ -244,6 +284,38 @@
     border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
   }
   .history-back { margin-top: 8px; align-self: center; }
+
+  /* ===== Cropper ===== */
+  #crop-modal .modal { gap: 10px; padding: 16px 20px; }
+  .crop-container {
+    width: 220px; height: 220px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: #111;
+    border: 3px solid #e94560;
+    position: relative;
+    touch-action: none;
+    cursor: grab;
+    flex-shrink: 0;
+  }
+  .crop-container:active { cursor: grabbing; }
+  #crop-img {
+    position: absolute;
+    top: 0; left: 0;
+    transform-origin: 0 0;
+    pointer-events: none;
+    display: block;
+    max-width: none; max-height: none;
+  }
+  .crop-hint { font-size: 12px; color: #666; text-align: center; }
+  .crop-zoom-row {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .crop-zoom-row .btn {
+    width: 38px; height: 38px; padding: 0;
+    border-radius: 50%; font-size: 22px;
+    display: flex; align-items: center; justify-content: center;
+  }
 </style>
 </head>
 <body>
@@ -257,11 +329,28 @@
   <div id="setup-screen" class="screen active">
     <h1>🀄 麻將計分</h1>
     <div class="player-inputs">
-      <input type="text" id="p1" placeholder="東/玩家1" maxlength="6">
-      <input type="text" id="p2" placeholder="南/玩家2" maxlength="6">
-      <input type="text" id="p3" placeholder="西/玩家3" maxlength="6">
-      <input type="text" id="p4" placeholder="北/玩家4" maxlength="6">
+      <div class="player-setup">
+        <div class="avatar-upload" id="av0" onclick="pickPhoto(0)"><span id="av0-icon">👤</span></div>
+        <input type="text" id="p1" placeholder="玩家1" maxlength="6">
+      </div>
+      <div class="player-setup">
+        <div class="avatar-upload" id="av1" onclick="pickPhoto(1)"><span id="av1-icon">👤</span></div>
+        <input type="text" id="p2" placeholder="玩家2" maxlength="6">
+      </div>
+      <div class="player-setup">
+        <div class="avatar-upload" id="av2" onclick="pickPhoto(2)"><span id="av2-icon">👤</span></div>
+        <input type="text" id="p3" placeholder="玩家3" maxlength="6">
+      </div>
+      <div class="player-setup">
+        <div class="avatar-upload" id="av3" onclick="pickPhoto(3)"><span id="av3-icon">👤</span></div>
+        <input type="text" id="p4" placeholder="玩家4" maxlength="6">
+      </div>
     </div>
+    <!-- hidden file inputs -->
+    <input type="file" id="file0" accept="image/*" style="display:none" onchange="onPhoto(0,this)">
+    <input type="file" id="file1" accept="image/*" style="display:none" onchange="onPhoto(1,this)">
+    <input type="file" id="file2" accept="image/*" style="display:none" onchange="onPhoto(2,this)">
+    <input type="file" id="file3" accept="image/*" style="display:none" onchange="onPhoto(3,this)">
     <div style="display:flex;gap:16px">
       <div class="setup-row">
         <label>底</label>
@@ -298,14 +387,49 @@
   <div class="modal" id="modal-content"></div>
 </div>
 
+<!-- Crop Modal -->
+<div class="modal-overlay" id="crop-modal">
+  <div class="modal">
+    <h2>選擇圓形區域</h2>
+    <div class="crop-container" id="crop-container">
+      <img id="crop-img" alt="">
+    </div>
+    <p class="crop-hint">拖曳移動 · 雙指縮放</p>
+    <div class="crop-zoom-row">
+      <button class="btn btn-secondary" onclick="cropZoom(-0.15)">−</button>
+      <span style="font-size:13px;color:#aaa">縮放</span>
+      <button class="btn btn-secondary" onclick="cropZoom(0.15)">+</button>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-primary" onclick="confirmCrop()">確認</button>
+      <button class="btn btn-secondary" onclick="cancelCrop()">取消</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const state = {
   players: [],
+  photos: [null, null, null, null],
   scores: [0, 0, 0, 0],
   base: 30,
   tai: 10,
   history: []
 };
+
+// --- Photo upload ---
+function pickPhoto(i) {
+  document.getElementById('file' + i).click();
+}
+
+function onPhoto(i, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => openCropper(i, e.target.result);
+  reader.readAsDataURL(file);
+  input.value = ''; // allow re-selecting same file
+}
 
 // --- Screen management ---
 function showScreen(id) {
@@ -322,6 +446,7 @@ function startGame() {
     document.getElementById('p4').value.trim() || '玩家4',
   ];
   state.players = names;
+  // photos already set by onPhoto, keep them
   state.scores = [0, 0, 0, 0];
   state.history = [];
   state.base = parseInt(document.getElementById('base-price').value) || 30;
@@ -350,8 +475,12 @@ function renderScoreboard() {
     const cls = s > 0 ? 'positive' : s < 0 ? 'negative' : '';
     const scls = s > 0 ? 'pos' : s < 0 ? 'neg' : 'zero';
     const prefix = s > 0 ? '+' : '';
+    const avatarHtml = state.photos[i]
+      ? `<img class="avatar" src="${state.photos[i]}" alt="">`
+      : `<div class="avatar-placeholder">👤</div>`;
     return `<div class="player-card ${cls}">
       <span class="rank">#${ranks[i]}</span>
+      ${avatarHtml}
       <span class="name">${esc(name)}</span>
       <span class="score ${scls}">${prefix}${s}</span>
     </div>`;
@@ -532,6 +661,138 @@ function undoTo(idx) {
   renderScoreboard();
   showHistory();
 }
+
+// --- Cropper ---
+const CROP_BOX = 220;
+let cropState = { playerIdx: null, x: 0, y: 0, scale: 1, imgW: 0, imgH: 0 };
+let _drag = null, _pinch = null;
+
+function openCropper(playerIdx, src) {
+  cropState.playerIdx = playerIdx;
+  const img = document.getElementById('crop-img');
+  img.onload = () => {
+    cropState.imgW = img.naturalWidth;
+    cropState.imgH = img.naturalHeight;
+    img.style.width  = cropState.imgW + 'px';
+    img.style.height = cropState.imgH + 'px';
+    // Initial scale: fill the circle with the short side
+    const minDim = Math.min(cropState.imgW, cropState.imgH);
+    cropState.scale = CROP_BOX / minDim;
+    cropState.x = (CROP_BOX - cropState.imgW * cropState.scale) / 2;
+    cropState.y = (CROP_BOX - cropState.imgH * cropState.scale) / 2;
+    updateCropTransform();
+  };
+  img.src = src;
+  document.getElementById('crop-modal').classList.add('active');
+}
+
+function updateCropTransform() {
+  const img = document.getElementById('crop-img');
+  img.style.transform = `translate(${cropState.x}px,${cropState.y}px) scale(${cropState.scale})`;
+}
+
+function cropZoom(delta) {
+  const newScale = Math.max(0.2, Math.min(10, cropState.scale * (1 + delta)));
+  const f = newScale / cropState.scale;
+  const cx = CROP_BOX / 2, cy = CROP_BOX / 2;
+  cropState.x = cx - (cx - cropState.x) * f;
+  cropState.y = cy - (cy - cropState.y) * f;
+  cropState.scale = newScale;
+  updateCropTransform();
+}
+
+function confirmCrop() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = CROP_BOX;
+  const ctx = canvas.getContext('2d');
+  ctx.beginPath();
+  ctx.arc(CROP_BOX / 2, CROP_BOX / 2, CROP_BOX / 2, 0, Math.PI * 2);
+  ctx.clip();
+  const img = document.getElementById('crop-img');
+  ctx.save();
+  ctx.translate(cropState.x, cropState.y);
+  ctx.scale(cropState.scale, cropState.scale);
+  ctx.drawImage(img, 0, 0, cropState.imgW, cropState.imgH);
+  ctx.restore();
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+  const i = cropState.playerIdx;
+  state.photos[i] = dataUrl;
+  const av = document.getElementById('av' + i);
+  if (av) av.innerHTML = `<img src="${dataUrl}" alt="">`;
+  document.getElementById('crop-modal').classList.remove('active');
+}
+
+function cancelCrop() {
+  document.getElementById('crop-modal').classList.remove('active');
+}
+
+function initCropEvents() {
+  const el = document.getElementById('crop-container');
+
+  // Touch — drag
+  el.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      _pinch = null;
+      _drag = { sx: e.touches[0].clientX, sy: e.touches[0].clientY,
+                ox: cropState.x, oy: cropState.y };
+    } else if (e.touches.length === 2) {
+      _drag = null;
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const rect = el.getBoundingClientRect();
+      _pinch = {
+        dist: Math.hypot(dx, dy),
+        os: cropState.scale, ox: cropState.x, oy: cropState.y,
+        mx: (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left,
+        my: (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top,
+      };
+    }
+  }, { passive: false });
+
+  // Touch — move
+  el.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (_drag && e.touches.length === 1) {
+      cropState.x = _drag.ox + e.touches[0].clientX - _drag.sx;
+      cropState.y = _drag.oy + e.touches[0].clientY - _drag.sy;
+      updateCropTransform();
+    } else if (_pinch && e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const f = Math.hypot(dx, dy) / _pinch.dist;
+      const newScale = Math.max(0.2, Math.min(10, _pinch.os * f));
+      const sf = newScale / _pinch.os;
+      cropState.scale = newScale;
+      cropState.x = _pinch.mx - (_pinch.mx - _pinch.ox) * sf;
+      cropState.y = _pinch.my - (_pinch.my - _pinch.oy) * sf;
+      updateCropTransform();
+    }
+  }, { passive: false });
+
+  el.addEventListener('touchend', e => {
+    if (e.touches.length === 0) { _drag = null; _pinch = null; }
+    else if (e.touches.length === 1) { _pinch = null; }
+  });
+
+  // Mouse (desktop)
+  el.addEventListener('mousedown', e => {
+    _drag = { sx: e.clientX, sy: e.clientY, ox: cropState.x, oy: cropState.y };
+  });
+  document.addEventListener('mousemove', e => {
+    if (!_drag) return;
+    cropState.x = _drag.ox + e.clientX - _drag.sx;
+    cropState.y = _drag.oy + e.clientY - _drag.sy;
+    updateCropTransform();
+  });
+  document.addEventListener('mouseup', () => { _drag = null; });
+  el.addEventListener('wheel', e => {
+    e.preventDefault();
+    cropZoom(e.deltaY > 0 ? -0.08 : 0.08);
+  }, { passive: false });
+}
+
+initCropEvents();
 
 function esc(s) {
   const d = document.createElement('div');
