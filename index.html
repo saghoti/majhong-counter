@@ -335,19 +335,19 @@
     <div class="player-inputs">
       <div class="player-setup">
         <div class="avatar-upload" id="av0" onclick="pickPhoto(0)"><span id="av0-icon">👤</span></div>
-        <input type="text" id="p1" placeholder="玩家1" maxlength="6" oninput="renderDealerBtns()">
+        <input type="text" id="p1" placeholder="東" maxlength="6">
       </div>
       <div class="player-setup">
         <div class="avatar-upload" id="av1" onclick="pickPhoto(1)"><span id="av1-icon">👤</span></div>
-        <input type="text" id="p2" placeholder="玩家2" maxlength="6" oninput="renderDealerBtns()">
+        <input type="text" id="p2" placeholder="南" maxlength="6">
       </div>
       <div class="player-setup">
         <div class="avatar-upload" id="av2" onclick="pickPhoto(2)"><span id="av2-icon">👤</span></div>
-        <input type="text" id="p3" placeholder="玩家3" maxlength="6" oninput="renderDealerBtns()">
+        <input type="text" id="p3" placeholder="西" maxlength="6">
       </div>
       <div class="player-setup">
         <div class="avatar-upload" id="av3" onclick="pickPhoto(3)"><span id="av3-icon">👤</span></div>
-        <input type="text" id="p4" placeholder="玩家4" maxlength="6" oninput="renderDealerBtns()">
+        <input type="text" id="p4" placeholder="北" maxlength="6">
       </div>
     </div>
     <!-- hidden file inputs -->
@@ -365,10 +365,9 @@
         <input type="number" id="tai-price" value="10" min="0">
       </div>
     </div>
-    <div class="setup-row" style="flex-direction:column;gap:8px;align-items:center;">
-      <label style="width:auto;color:#aaa;font-size:13px;">初始莊家</label>
-      <div class="modal-btns" id="dealer-btns"></div>
-    </div>
+    <p style="font-size:12px;color:#666;text-align:center;line-height:1.7;">
+      初始莊家為東，按照（東→南→西→北→東）接莊
+    </p>
     <button class="btn btn-primary" onclick="startGame()">開始</button>
   </div>
 
@@ -427,7 +426,6 @@ const state = {
   renzhuang: 0,
   initialDealer: 0,
 };
-let selectedInitialDealer = 0;
 
 // --- Photo upload ---
 function pickPhoto(i) {
@@ -452,10 +450,10 @@ function showScreen(id) {
 // --- Setup ---
 function startGame() {
   const names = [
-    document.getElementById('p1').value.trim() || '玩家1',
-    document.getElementById('p2').value.trim() || '玩家2',
-    document.getElementById('p3').value.trim() || '玩家3',
-    document.getElementById('p4').value.trim() || '玩家4',
+    document.getElementById('p1').value.trim() || '東',
+    document.getElementById('p2').value.trim() || '南',
+    document.getElementById('p3').value.trim() || '西',
+    document.getElementById('p4').value.trim() || '北',
   ];
   state.players = names;
   // photos already set by onPhoto, keep them
@@ -463,9 +461,9 @@ function startGame() {
   state.history = [];
   state.base = parseInt(document.getElementById('base-price').value) || 30;
   state.tai = parseInt(document.getElementById('tai-price').value) || 10;
-  state.dealer = selectedInitialDealer;
+  state.dealer = 0;
   state.renzhuang = 0;
-  state.initialDealer = selectedInitialDealer;
+  state.initialDealer = 0;
   renderScoreboard();
   showScreen('game-screen');
 }
@@ -473,7 +471,6 @@ function startGame() {
 function goHome() {
   if (!confirm('確定要結束目前遊戲？')) return;
   showScreen('setup-screen');
-  renderDealerBtns();
 }
 
 // --- Scoreboard ---
@@ -858,14 +855,6 @@ function updateDealerState(winnerIdx) {
   }
 }
 
-function renderDealerBtns() {
-  const names = ['p1','p2','p3','p4'].map((id, i) =>
-    document.getElementById(id).value.trim() || `玩家${i+1}`);
-  document.getElementById('dealer-btns').innerHTML = names.map((name, i) =>
-    `<button class="btn ${i===selectedInitialDealer?'btn-primary':'btn-secondary'}"
-      onclick="selectedInitialDealer=${i};renderDealerBtns()">${esc(name)}</button>`
-  ).join('');
-}
 
 // --- Cropper ---
 const CROP_BOX = 220;
@@ -1014,7 +1003,6 @@ document.addEventListener('visibilitychange', () => {
 });
 requestWakeLock();
 
-renderDealerBtns();
 initCropEvents();
 
 function esc(s) {
