@@ -316,6 +316,14 @@
     border-radius: 50%; font-size: 22px;
     display: flex; align-items: center; justify-content: center;
   }
+  .dealer-badge {
+    position: absolute; top: 6px; right: 10px;
+    font-size: 11px; font-weight: 700;
+    color: #f39c12;
+    background: rgba(243,156,18,0.12);
+    border: 1px solid #f39c12;
+    border-radius: 4px; padding: 1px 5px; letter-spacing: 1px;
+  }
 </style>
 </head>
 <body>
@@ -331,19 +339,19 @@
     <div class="player-inputs">
       <div class="player-setup">
         <div class="avatar-upload" id="av0" onclick="pickPhoto(0)"><span id="av0-icon">👤</span></div>
-        <input type="text" id="p1" placeholder="玩家1" maxlength="6">
+        <input type="text" id="p1" placeholder="玩家1" maxlength="6" oninput="renderDealerBtns()">
       </div>
       <div class="player-setup">
         <div class="avatar-upload" id="av1" onclick="pickPhoto(1)"><span id="av1-icon">👤</span></div>
-        <input type="text" id="p2" placeholder="玩家2" maxlength="6">
+        <input type="text" id="p2" placeholder="玩家2" maxlength="6" oninput="renderDealerBtns()">
       </div>
       <div class="player-setup">
         <div class="avatar-upload" id="av2" onclick="pickPhoto(2)"><span id="av2-icon">👤</span></div>
-        <input type="text" id="p3" placeholder="玩家3" maxlength="6">
+        <input type="text" id="p3" placeholder="玩家3" maxlength="6" oninput="renderDealerBtns()">
       </div>
       <div class="player-setup">
         <div class="avatar-upload" id="av3" onclick="pickPhoto(3)"><span id="av3-icon">👤</span></div>
-        <input type="text" id="p4" placeholder="玩家4" maxlength="6">
+        <input type="text" id="p4" placeholder="玩家4" maxlength="6" oninput="renderDealerBtns()">
       </div>
     </div>
     <!-- hidden file inputs -->
@@ -360,6 +368,10 @@
         <label>一台</label>
         <input type="number" id="tai-price" value="10" min="0">
       </div>
+    </div>
+    <div class="setup-row" style="flex-direction:column;gap:8px;align-items:center;">
+      <label style="width:auto;color:#aaa;font-size:13px;">初始莊家</label>
+      <div class="modal-btns" id="dealer-btns"></div>
     </div>
     <button class="btn btn-primary" onclick="startGame()">開始</button>
   </div>
@@ -414,8 +426,12 @@ const state = {
   scores: [0, 0, 0, 0],
   base: 30,
   tai: 10,
-  history: []
+  history: [],
+  dealer: 0,
+  renzhuang: 0,
+  initialDealer: 0,
 };
+let selectedInitialDealer = 0;
 
 // --- Photo upload ---
 function pickPhoto(i) {
@@ -451,6 +467,9 @@ function startGame() {
   state.history = [];
   state.base = parseInt(document.getElementById('base-price').value) || 30;
   state.tai = parseInt(document.getElementById('tai-price').value) || 10;
+  state.dealer = selectedInitialDealer;
+  state.renzhuang = 0;
+  state.initialDealer = selectedInitialDealer;
   renderScoreboard();
   showScreen('game-screen');
 }
@@ -459,6 +478,8 @@ function resetGame() {
   if (!confirm('確定要重置所有分數？')) return;
   state.scores = [0, 0, 0, 0];
   state.history = [];
+  state.dealer = state.initialDealer;
+  state.renzhuang = 0;
   renderScoreboard();
 }
 
@@ -478,8 +499,12 @@ function renderScoreboard() {
     const avatarHtml = state.photos[i]
       ? `<img class="avatar" src="${state.photos[i]}" alt="">`
       : `<div class="avatar-placeholder">👤</div>`;
+    const dealerBadge = (i === state.dealer)
+      ? `<span class="dealer-badge">莊${state.renzhuang > 0 ? '×'+state.renzhuang : ''}</span>`
+      : '';
     return `<div class="player-card ${cls}">
       <span class="rank">#${ranks[i]}</span>
+      ${dealerBadge}
       ${avatarHtml}
       <span class="name">${esc(name)}</span>
       <span class="score ${scls}">${prefix}${s}</span>
@@ -491,7 +516,7 @@ function renderScoreboard() {
 let scoring = {};
 
 function openScoring() {
-  scoring = { type: null, winner: null, loser: null, dealer: null, taiCount: 0, multiplier: 1 };
+  scoring = { type: null, winner: null, loser: null, taiCount: 0, multiplier: 1 };
   stepChooseType();
 }
 
@@ -517,23 +542,12 @@ function stepChooseType() {
 
 function stepChooseWinner() {
   const btns = state.players.map((name, i) =>
-    `<button class="btn btn-secondary" onclick="scoring.winner=${i};${scoring.type === '放槍' ? 'stepChooseLoser()' : 'stepChooseDealer()'}">${esc(name)}</button>`
+    `<button class="btn btn-secondary" onclick="scoring.winner=${i};${scoring.type === '放槍' ? 'stepChooseLoser()' : 'stepChooseTai()'}">${esc(name)}</button>`
   ).join('');
   showModal(`
     <h2>誰胡牌？</h2>
     <div class="modal-btns">${btns}</div>
     <button class="btn btn-secondary" onclick="stepChooseType()" style="margin-top:4px">上一步</button>
-  `);
-}
-
-function stepChooseDealer() {
-  const btns = state.players.map((name, i) =>
-    `<button class="btn btn-secondary${scoring.dealer === i ? ' selected' : ''}" onclick="scoring.dealer=${i};stepChooseTai()">${esc(name)}</button>`
-  ).join('');
-  showModal(`
-    <h2>誰是莊家？</h2>
-    <div class="modal-btns">${btns}</div>
-    <button class="btn btn-secondary" onclick="stepChooseWinner()" style="margin-top:4px">上一步</button>
   `);
 }
 
@@ -550,24 +564,38 @@ function stepChooseLoser() {
 }
 
 function stepChooseTai() {
-  scoring.taiCount = 0;
+  if (scoring.type === '自摸') {
+    const extraTai = 1 + 2 * state.renzhuang;
+    scoring.taiCount = scoring.winner === state.dealer ? extraTai : 1;
+  } else {
+    scoring.taiCount = 0;
+  }
   renderTaiStep();
 }
 
 function renderTaiStep() {
   const amount = state.base + state.tai * scoring.taiCount;
+  const d = state.dealer;
+  const w = scoring.winner;
+  const extraTai = 1 + 2 * state.renzhuang;
   let preview = '';
   if (scoring.type === '自摸') {
-    const d = scoring.dealer, w = scoring.winner;
-    if (d !== null && d !== w) {
-      const dealerAmount = state.base + state.tai * (scoring.taiCount + 1);
-      const total = amount * 2 + dealerAmount;
-      preview = `非莊每家付 ${amount}，${esc(state.players[d])}(莊)付 ${dealerAmount}，共收 ${total}`;
+    if (d !== w) {
+      const dealerAmount = state.base + state.tai * (scoring.taiCount + extraTai);
+      const rNote = state.renzhuang > 0 ? `連莊${state.renzhuang}，+${extraTai}台` : `莊+1台`;
+      preview = `非莊每家付 ${amount}，${esc(state.players[d])}(莊)付 ${dealerAmount}（${rNote}），共收 ${amount*2+dealerAmount}`;
     } else {
       preview = `每家付 ${amount}，共收 ${amount * 3}`;
     }
   } else {
-    preview = `${esc(state.players[scoring.loser])} 付 ${amount}`;
+    const l = scoring.loser;
+    if (l === d) {
+      const dealerAmount = state.base + state.tai * (scoring.taiCount + extraTai);
+      const rNote = state.renzhuang > 0 ? `連莊${state.renzhuang}，+${extraTai}台` : `莊+1台`;
+      preview = `${esc(state.players[l])}(莊)放槍，付 ${dealerAmount}（${rNote}）`;
+    } else {
+      preview = `${esc(state.players[l])} 付 ${amount}`;
+    }
   }
   showModal(`
     <h2>幾台？</h2>
@@ -579,13 +607,18 @@ function renderTaiStep() {
     <div class="calc-preview">${preview}</div>
     <div class="modal-btns">
       <button class="btn btn-primary" onclick="stepChooseMultiplier()">下一步</button>
-      <button class="btn btn-secondary" onclick="${scoring.type === '放槍' ? 'stepChooseLoser()' : 'stepChooseDealer()'}">上一步</button>
+      <button class="btn btn-secondary" onclick="${scoring.type === '放槍' ? 'stepChooseLoser()' : 'stepChooseWinner()'}">上一步</button>
     </div>
   `);
 }
 
 function changeTai(d) {
-  scoring.taiCount = Math.max(0, scoring.taiCount + d);
+  let min = 0;
+  if (scoring.type === '自摸') {
+    const extraTai = 1 + 2 * state.renzhuang;
+    min = scoring.winner === state.dealer ? extraTai : 1;
+  }
+  scoring.taiCount = Math.max(min, scoring.taiCount + d);
   renderTaiStep();
 }
 
@@ -597,18 +630,28 @@ function stepChooseMultiplier() {
 function renderMultiplierStep() {
   const amount = state.base + state.tai * scoring.taiCount;
   const finalAmount = amount * scoring.multiplier;
+  const d = state.dealer;
+  const w = scoring.winner;
+  const extraTai = 1 + 2 * state.renzhuang;
   let preview = '';
   if (scoring.type === '自摸') {
-    const d = scoring.dealer, w = scoring.winner;
-    if (d !== null && d !== w) {
-      const dealerFinal = (state.base + state.tai * (scoring.taiCount + 1)) * scoring.multiplier;
+    if (d !== w) {
+      const dealerFinal = (state.base + state.tai * (scoring.taiCount + extraTai)) * scoring.multiplier;
       const total = finalAmount * 2 + dealerFinal;
-      preview = `非莊每家付 ${finalAmount}，${esc(state.players[d])}(莊)付 ${dealerFinal}，共收 ${total}`;
+      const rNote = state.renzhuang > 0 ? `連莊${state.renzhuang}，+${extraTai}台` : `莊+1台`;
+      preview = `非莊每家付 ${finalAmount}，${esc(state.players[d])}(莊)付 ${dealerFinal}（${rNote}），共收 ${total}`;
     } else {
       preview = `每家付 ${finalAmount}，共收 ${finalAmount * 3}`;
     }
   } else {
-    preview = `${esc(state.players[scoring.loser])} 付 ${finalAmount}`;
+    const l = scoring.loser;
+    if (l === d) {
+      const dealerFinal = (state.base + state.tai * (scoring.taiCount + extraTai)) * scoring.multiplier;
+      const rNote = state.renzhuang > 0 ? `連莊${state.renzhuang}，+${extraTai}台` : `莊+1台`;
+      preview = `${esc(state.players[l])}(莊)放槍，付 ${dealerFinal}（${rNote}）`;
+    } else {
+      preview = `${esc(state.players[scoring.loser])} 付 ${finalAmount}`;
+    }
   }
   const mulLabel = scoring.multiplier + 'x';
   showModal(`
@@ -637,22 +680,24 @@ function confirmScore() {
   const amount = baseAmount * scoring.multiplier;
   const mul = scoring.multiplier;
   const w = scoring.winner;
+  const d = state.dealer;
+  const extraTai = 1 + 2 * state.renzhuang;
   const prev = [...state.scores];
   let desc = '';
   const mulTag = mul > 1 ? ` ×${mul}` : '';
 
   if (scoring.type === '自摸') {
-    const d = scoring.dealer;
-    const hasDealer = d !== null && d !== w;
+    const hasDealer = d !== w;
     if (hasDealer) {
-      const dealerAmount = (state.base + state.tai * (scoring.taiCount + 1)) * mul;
+      const dealerAmount = (state.base + state.tai * (scoring.taiCount + extraTai)) * mul;
       const totalWin = amount * 2 + dealerAmount;
       for (let i = 0; i < 4; i++) {
         if (i === w) state.scores[i] += totalWin;
         else if (i === d) state.scores[i] -= dealerAmount;
         else state.scores[i] -= amount;
       }
-      desc = `${state.players[w]} 自摸 ${scoring.taiCount}台${mulTag} (+${totalWin})，${state.players[d]}(莊)+1台`;
+      const rNote = state.renzhuang > 0 ? `連莊${state.renzhuang}，+${extraTai}台` : `莊+1台`;
+      desc = `${state.players[w]} 自摸 ${scoring.taiCount}台${mulTag} (+${totalWin})，${state.players[d]}(莊)${rNote}`;
     } else {
       for (let i = 0; i < 4; i++) {
         if (i === w) state.scores[i] += amount * 3;
@@ -662,12 +707,21 @@ function confirmScore() {
     }
   } else {
     const l = scoring.loser;
-    state.scores[w] += amount;
-    state.scores[l] -= amount;
-    desc = `${state.players[w]} 胡 ${state.players[l]} ${scoring.taiCount}台${mulTag} (+${amount})`;
+    if (l === d) {
+      const dealerAmount = (state.base + state.tai * (scoring.taiCount + extraTai)) * mul;
+      state.scores[w] += dealerAmount;
+      state.scores[l] -= dealerAmount;
+      const rNote = state.renzhuang > 0 ? `連莊${state.renzhuang}，+${extraTai}台` : `莊+1台`;
+      desc = `${state.players[w]} 胡 ${state.players[l]}(莊) ${scoring.taiCount}台${mulTag} (+${dealerAmount})，${rNote}`;
+    } else {
+      state.scores[w] += amount;
+      state.scores[l] -= amount;
+      desc = `${state.players[w]} 胡 ${state.players[l]} ${scoring.taiCount}台${mulTag} (+${amount})`;
+    }
   }
 
-  state.history.push({ desc, prev, after: [...state.scores] });
+  state.history.push({ desc, prev, after: [...state.scores], winnerIdx: w });
+  updateDealerState(w);
   renderScoreboard();
   closeModal();
 }
@@ -689,11 +743,44 @@ function showHistory() {
 }
 
 function undoTo(idx) {
-  if (!confirm(`確定撤銷「${state.history[idx].desc}」？（此筆之後的紀錄也會一併撤銷）`)) return;
-  state.scores = [...state.history[idx].prev];
-  state.history = state.history.slice(0, idx);
+  if (!confirm(`確定撤銷「${state.history[idx].desc}」？`)) return;
+  const entry = state.history[idx];
+  const delta = entry.after.map((a, i) => a - entry.prev[i]);
+  state.history.splice(idx, 1);
+  for (let j = idx; j < state.history.length; j++) {
+    state.history[j].prev = state.history[j].prev.map((v, i) => v - delta[i]);
+    state.history[j].after = state.history[j].after.map((v, i) => v - delta[i]);
+  }
+  state.scores = state.scores.map((v, i) => v - delta[i]);
+
+  // 從 initialDealer 重播莊家狀態
+  let d = state.initialDealer, r = 0;
+  for (const h of state.history) {
+    if (h.winnerIdx === d) { r++; } else { d = (d + 1) % 4; r = 0; }
+  }
+  state.dealer = d;
+  state.renzhuang = r;
+
   renderScoreboard();
   showHistory();
+}
+
+function updateDealerState(winnerIdx) {
+  if (winnerIdx === state.dealer) {
+    state.renzhuang++;
+  } else {
+    state.dealer = (state.dealer + 1) % 4;
+    state.renzhuang = 0;
+  }
+}
+
+function renderDealerBtns() {
+  const names = ['p1','p2','p3','p4'].map((id, i) =>
+    document.getElementById(id).value.trim() || `玩家${i+1}`);
+  document.getElementById('dealer-btns').innerHTML = names.map((name, i) =>
+    `<button class="btn ${i===selectedInitialDealer?'btn-primary':'btn-secondary'}"
+      onclick="selectedInitialDealer=${i};renderDealerBtns()">${esc(name)}</button>`
+  ).join('');
 }
 
 // --- Cropper ---
@@ -826,6 +913,7 @@ function initCropEvents() {
   }, { passive: false });
 }
 
+renderDealerBtns();
 initCropEvents();
 
 function esc(s) {
