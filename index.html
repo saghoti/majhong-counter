@@ -536,9 +536,53 @@ function stepChooseType() {
     <div class="modal-btns">
       <button class="btn btn-primary" onclick="scoring.type='自摸';stepChooseWinner()">自摸</button>
       <button class="btn btn-primary" onclick="scoring.type='放槍';stepChooseWinner()">放槍</button>
+      <button class="btn btn-secondary" onclick="stepLiuju()">流局</button>
     </div>
     <button class="btn btn-secondary" onclick="cancelScoring()" style="margin-top:4px">取消</button>
   `);
+}
+
+function stepLiuju() {
+  const next = state.renzhuang + 1;
+  const nextExtra = 1 + 2 * next;
+  showModal(`
+    <h2>流局</h2>
+    <div class="calc-preview">${esc(state.players[state.dealer])} 繼續坐莊</div>
+    <div class="calc-preview">連莊 ${state.renzhuang} → ${next}，下局莊+${nextExtra}台</div>
+    <div class="modal-btns">
+      <button class="btn btn-primary" onclick="confirmLiuju()">確認</button>
+      <button class="btn btn-secondary" onclick="stepChooseType()">上一步</button>
+    </div>
+  `);
+}
+
+function confirmLiuju() {
+  const w = state.dealer;
+  const desc = `流局（${state.players[w]} 連莊×${state.renzhuang + 1}）`;
+  if (correctionIdx !== null) {
+    const idx = correctionIdx;
+    correctionIdx = null;
+    const oldEntry = state.history[idx];
+    const oldDelta = oldEntry.after.map((a, i) => a - oldEntry.prev[i]);
+    const netDelta = oldDelta.map(v => -v);
+    const newPrev = [...oldEntry.prev];
+    state.history[idx] = { desc, prev: newPrev, after: [...newPrev], winnerIdx: w };
+    for (let j = idx + 1; j < state.history.length; j++) {
+      state.history[j].prev  = state.history[j].prev.map((v, i) => v + netDelta[i]);
+      state.history[j].after = state.history[j].after.map((v, i) => v + netDelta[i]);
+    }
+    state.scores = state.scores.map((v, i) => v + netDelta[i]);
+    replayDealerState();
+    renderScoreboard();
+    closeModal();
+    showHistory();
+  } else {
+    const prev = [...state.scores];
+    state.history.push({ desc, prev, after: [...state.scores], winnerIdx: w });
+    updateDealerState(w);
+    renderScoreboard();
+    closeModal();
+  }
 }
 
 function stepChooseWinner() {
