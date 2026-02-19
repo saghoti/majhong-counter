@@ -869,7 +869,7 @@ function renderDealerBtns() {
 
 // --- Cropper ---
 const CROP_BOX = 220;
-let cropState = { playerIdx: null, x: 0, y: 0, scale: 1, imgW: 0, imgH: 0 };
+let cropState = { playerIdx: null, x: 0, y: 0, scale: 1, minScale: 0.01, imgW: 0, imgH: 0 };
 let _drag = null, _pinch = null;
 
 function openCropper(playerIdx, src) {
@@ -883,6 +883,7 @@ function openCropper(playerIdx, src) {
     // Initial scale: fill the circle with the short side
     const minDim = Math.min(cropState.imgW, cropState.imgH);
     cropState.scale = CROP_BOX / minDim;
+    cropState.minScale = cropState.scale; // 以初始縮放為最小下限，避免低於初始大小
     cropState.x = (CROP_BOX - cropState.imgW * cropState.scale) / 2;
     cropState.y = (CROP_BOX - cropState.imgH * cropState.scale) / 2;
     updateCropTransform();
@@ -897,7 +898,7 @@ function updateCropTransform() {
 }
 
 function cropZoom(delta) {
-  const newScale = Math.max(0.2, Math.min(10, cropState.scale * (1 + delta)));
+  const newScale = Math.max(cropState.minScale, Math.min(10, cropState.scale * (1 + delta)));
   const f = newScale / cropState.scale;
   const cx = CROP_BOX / 2, cy = CROP_BOX / 2;
   cropState.x = cx - (cx - cropState.x) * f;
@@ -966,7 +967,7 @@ function initCropEvents() {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       const f = Math.hypot(dx, dy) / _pinch.dist;
-      const newScale = Math.max(0.2, Math.min(10, _pinch.os * f));
+      const newScale = Math.max(cropState.minScale, Math.min(10, _pinch.os * f));
       const sf = newScale / _pinch.os;
       cropState.scale = newScale;
       cropState.x = _pinch.mx - (_pinch.mx - _pinch.ox) * sf;
@@ -977,7 +978,12 @@ function initCropEvents() {
 
   el.addEventListener('touchend', e => {
     if (e.touches.length === 0) { _drag = null; _pinch = null; }
-    else if (e.touches.length === 1) { _pinch = null; }
+    else if (e.touches.length === 1) {
+      _pinch = null;
+      // 捏合結束剩一根手指時，繼續允許拖曳
+      _drag = { sx: e.touches[0].clientX, sy: e.touches[0].clientY,
+                ox: cropState.x, oy: cropState.y };
+    }
   });
 
   // Mouse (desktop)
