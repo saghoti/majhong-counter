@@ -794,10 +794,14 @@ function showHistory() {
   if (state.history.length === 0) {
     list.innerHTML = '<div style="text-align:center;color:#666;padding:20px">尚無紀錄</div>';
   } else {
+    const last = state.history.length - 1;
     list.innerHTML = state.history.map((h, i) => `
       <div class="history-item">
         <span class="desc">${i + 1}. ${esc(h.desc)}</span>
-        <button class="undo-btn" onclick="correctRecord(${i})">修正</button>
+        <div style="display:flex;gap:6px">
+          ${i === last ? `<button class="undo-btn" onclick="undoLast()">撤銷</button>` : ''}
+          <button class="undo-btn" onclick="correctRecord(${i})">修正</button>
+        </div>
       </div>
     `).reverse().join('');
   }
@@ -811,6 +815,19 @@ function replayDealerState() {
   }
   state.dealer = d;
   state.renzhuang = r;
+}
+
+function undoLast() {
+  const idx = state.history.length - 1;
+  if (idx < 0) return;
+  if (!confirm(`確定撤銷「${state.history[idx].desc}」？`)) return;
+  const entry = state.history[idx];
+  const delta = entry.after.map((a, i) => a - entry.prev[i]);
+  state.history.splice(idx, 1);
+  state.scores = state.scores.map((v, i) => v - delta[i]);
+  replayDealerState();
+  renderScoreboard();
+  showHistory();
 }
 
 function correctRecord(idx) {
