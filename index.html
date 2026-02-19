@@ -514,6 +514,7 @@ function renderScoreboard() {
 
 // --- Scoring flow ---
 let scoring = {};
+let correctionIdx = null;
 
 function openScoring() {
   scoring = { type: null, winner: null, loser: null, taiCount: 0, multiplier: 1 };
@@ -536,7 +537,7 @@ function stepChooseType() {
       <button class="btn btn-primary" onclick="scoring.type='自摸';stepChooseWinner()">自摸</button>
       <button class="btn btn-primary" onclick="scoring.type='放槍';stepChooseWinner()">放槍</button>
     </div>
-    <button class="btn btn-secondary" onclick="closeModal()" style="margin-top:4px">取消</button>
+    <button class="btn btn-secondary" onclick="cancelScoring()" style="margin-top:4px">取消</button>
   `);
 }
 
@@ -682,48 +683,65 @@ function confirmScore() {
   const w = scoring.winner;
   const d = state.dealer;
   const extraTai = 1 + 2 * state.renzhuang;
-  const prev = [...state.scores];
-  let desc = '';
   const mulTag = mul > 1 ? ` ×${mul}` : '';
 
+  // Compute delta without touching state.scores yet
+  const delta = [0, 0, 0, 0];
+  let desc = '';
+
   if (scoring.type === '自摸') {
-    const hasDealer = d !== w;
-    if (hasDealer) {
+    if (d !== w) {
       const dealerAmount = (state.base + state.tai * (scoring.taiCount + extraTai)) * mul;
       const totalWin = amount * 2 + dealerAmount;
       for (let i = 0; i < 4; i++) {
-        if (i === w) state.scores[i] += totalWin;
-        else if (i === d) state.scores[i] -= dealerAmount;
-        else state.scores[i] -= amount;
+        delta[i] = (i === w) ? totalWin : (i === d) ? -dealerAmount : -amount;
       }
       const rNote = state.renzhuang > 0 ? `連莊${state.renzhuang}，+${extraTai}台` : `莊+1台`;
       desc = `${state.players[w]} 自摸 ${scoring.taiCount}台${mulTag} (+${totalWin})，${state.players[d]}(莊)${rNote}`;
     } else {
-      for (let i = 0; i < 4; i++) {
-        if (i === w) state.scores[i] += amount * 3;
-        else state.scores[i] -= amount;
-      }
+      for (let i = 0; i < 4; i++) delta[i] = (i === w) ? amount * 3 : -amount;
       desc = `${state.players[w]} 自摸 ${scoring.taiCount}台${mulTag} (+${amount * 3})`;
     }
   } else {
     const l = scoring.loser;
     if (l === d) {
       const dealerAmount = (state.base + state.tai * (scoring.taiCount + extraTai)) * mul;
-      state.scores[w] += dealerAmount;
-      state.scores[l] -= dealerAmount;
+      delta[w] = dealerAmount;
+      delta[l] = -dealerAmount;
       const rNote = state.renzhuang > 0 ? `連莊${state.renzhuang}，+${extraTai}台` : `莊+1台`;
       desc = `${state.players[w]} 胡 ${state.players[l]}(莊) ${scoring.taiCount}台${mulTag} (+${dealerAmount})，${rNote}`;
     } else {
-      state.scores[w] += amount;
-      state.scores[l] -= amount;
+      delta[w] = amount;
+      delta[l] = -amount;
       desc = `${state.players[w]} 胡 ${state.players[l]} ${scoring.taiCount}台${mulTag} (+${amount})`;
     }
   }
 
-  state.history.push({ desc, prev, after: [...state.scores], winnerIdx: w });
-  updateDealerState(w);
-  renderScoreboard();
-  closeModal();
+  if (correctionIdx !== null) {
+    const idx = correctionIdx;
+    correctionIdx = null;
+    const oldEntry = state.history[idx];
+    const oldDelta = oldEntry.after.map((a, i) => a - oldEntry.prev[i]);
+    const netDelta = delta.map((v, i) => v - oldDelta[i]);
+    const newPrev = [...oldEntry.prev];
+    state.history[idx] = { desc, prev: newPrev, after: newPrev.map((v, i) => v + delta[i]), winnerIdx: w };
+    for (let j = idx + 1; j < state.history.length; j++) {
+      state.history[j].prev  = state.history[j].prev.map((v, i) => v + netDelta[i]);
+      state.history[j].after = state.history[j].after.map((v, i) => v + netDelta[i]);
+    }
+    state.scores = state.scores.map((v, i) => v + netDelta[i]);
+    replayDealerState();
+    renderScoreboard();
+    closeModal();
+    showHistory();
+  } else {
+    const prev = [...state.scores];
+    state.scores = state.scores.map((v, i) => v + delta[i]);
+    state.history.push({ desc, prev, after: [...state.scores], winnerIdx: w });
+    updateDealerState(w);
+    renderScoreboard();
+    closeModal();
+  }
 }
 
 // --- History ---
@@ -735,34 +753,46 @@ function showHistory() {
     list.innerHTML = state.history.map((h, i) => `
       <div class="history-item">
         <span class="desc">${i + 1}. ${esc(h.desc)}</span>
-        <button class="undo-btn" onclick="undoTo(${i})">撤銷</button>
+        <button class="undo-btn" onclick="correctRecord(${i})">修正</button>
       </div>
     `).reverse().join('');
   }
   showScreen('history-screen');
 }
 
-function undoTo(idx) {
-  if (!confirm(`確定撤銷「${state.history[idx].desc}」？`)) return;
-  const entry = state.history[idx];
-  const delta = entry.after.map((a, i) => a - entry.prev[i]);
-  state.history.splice(idx, 1);
-  for (let j = idx; j < state.history.length; j++) {
-    state.history[j].prev = state.history[j].prev.map((v, i) => v - delta[i]);
-    state.history[j].after = state.history[j].after.map((v, i) => v - delta[i]);
-  }
-  state.scores = state.scores.map((v, i) => v - delta[i]);
-
-  // 從 initialDealer 重播莊家狀態
+function replayDealerState() {
   let d = state.initialDealer, r = 0;
   for (const h of state.history) {
     if (h.winnerIdx === d) { r++; } else { d = (d + 1) % 4; r = 0; }
   }
   state.dealer = d;
   state.renzhuang = r;
+}
 
-  renderScoreboard();
-  showHistory();
+function correctRecord(idx) {
+  correctionIdx = idx;
+  // Rewind dealer state to just before this record
+  let d = state.initialDealer, r = 0;
+  for (let i = 0; i < idx; i++) {
+    const h = state.history[i];
+    if (h.winnerIdx === d) { r++; } else { d = (d + 1) % 4; r = 0; }
+  }
+  state.dealer = d;
+  state.renzhuang = r;
+  scoring = { type: null, winner: null, loser: null, taiCount: 0, multiplier: 1 };
+  showScreen('game-screen');
+  stepChooseType();
+}
+
+function cancelScoring() {
+  if (correctionIdx !== null) {
+    correctionIdx = null;
+    replayDealerState();
+    closeModal();
+    showHistory();
+  } else {
+    closeModal();
+  }
 }
 
 function updateDealerState(winnerIdx) {
