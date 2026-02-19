@@ -16,10 +16,6 @@
     overflow: hidden;
     user-select: none;
   }
-  @media screen and (orientation: portrait) {
-    .rotate-hint { display: flex !important; }
-    .app { display: none !important; }
-  }
   .rotate-hint {
     display: none;
     position: fixed; inset: 0;
@@ -382,7 +378,7 @@
     <div class="toolbar">
       <button class="btn btn-primary" onclick="openScoring()">計分</button>
       <button class="btn btn-secondary" onclick="showHistory()">紀錄</button>
-      <button class="btn btn-secondary" onclick="resetGame()">重置</button>
+      <button class="btn btn-secondary" onclick="goHome()">返回</button>
     </div>
   </div>
 
@@ -474,13 +470,10 @@ function startGame() {
   showScreen('game-screen');
 }
 
-function resetGame() {
-  if (!confirm('確定要重置所有分數？')) return;
-  state.scores = [0, 0, 0, 0];
-  state.history = [];
-  state.dealer = state.initialDealer;
-  state.renzhuang = 0;
-  renderScoreboard();
+function goHome() {
+  if (!confirm('確定要結束目前遊戲？')) return;
+  showScreen('setup-screen');
+  renderDealerBtns();
 }
 
 // --- Scoreboard ---
@@ -1003,6 +996,17 @@ function initCropEvents() {
     cropZoom(e.deltaY > 0 ? -0.08 : 0.08);
   }, { passive: false });
 }
+
+// --- Wake Lock ---
+let wakeLock = null;
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') requestWakeLock();
+});
+requestWakeLock();
 
 renderDealerBtns();
 initCropEvents();
